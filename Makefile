@@ -128,3 +128,4 @@ cover:
 .PHONY: clean
 clean:
 	go clean
+	rm $(GOBIN)/thriftrw
