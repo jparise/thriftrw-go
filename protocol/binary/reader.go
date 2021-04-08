@@ -70,25 +70,27 @@ func fixedWidth(t wire.Type) int64 {
 	}
 }
 
-func (br *Reader) skipStruct(off int64) (int64, error) {
+func (br *Reader) skipStruct(off int64) (int64, int, error) {
 	typ, off, err := br.readByte(off)
 	if err != nil {
-		return off, err
+		return off, 0, err
 	}
 
+	skipped := 0
 	for typ != 0 {
 		off += 2 // field ID
 		off, err = br.skipValue(wire.Type(typ), off)
 		if err != nil {
-			return off, err
+			return off, skipped, err
 		}
+		skipped++
 
 		typ, off, err = br.readByte(off)
 		if err != nil {
-			return off, err
+			return off, skipped, err
 		}
 	}
-	return off, err
+	return off, skipped, err
 }
 
 func (br *Reader) skipMap(off int64) (int64, error) {
@@ -185,7 +187,8 @@ func (br *Reader) skipValue(t wire.Type, off int64) (int64, error) {
 		off += int64(length)
 		return off, err
 	case wire.TStruct:
-		return br.skipStruct(off)
+		off, _, err := br.skipStruct(off)
+		return off, err
 	case wire.TMap:
 		return br.skipMap(off)
 	case wire.TSet:
@@ -279,8 +282,13 @@ func (br *Reader) readString(off int64) (string, int64, error) {
 }
 
 func (br *Reader) readStruct(off int64) (wire.Struct, int64, error) {
+	soff, numFields, err := br.skipStruct(off)
+	if err != nil {
+		return wire.Struct{}, soff, err
+	}
+
 	// Pre-allocate slice to prevent frequesnt resizing at shorter slice lengths.
-	fields := make([]wire.Field, 0, 128)
+	fields := make([]wire.Field, 0, numFields)
 	// TODO(abg) add a lazy FieldList type instead of []Field.
 
 	typ, off, err := br.readByte(off)
